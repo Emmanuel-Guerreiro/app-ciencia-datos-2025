@@ -3,3 +3,10 @@ pandas
 numpy
 altair[all]
 scikit-learn
+xgboost
+joblib
+imblearn
+google-cloud-language
+google-cloud-storage
+pydantic
+cloudpickle
