@@ -7,14 +7,25 @@ import pandas as pd
 import altair as alt
 from pydantic import BaseModel, Field, ValidationError
 from typing import Any, Dict, List, Union
-import joblib
 import re
 import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 
-LANGUAGE_CODE = "en"
-
-API_KEY = "AIzaSyAOD6UW_TpeD3sUHDo7ig2kuhw9O31m2Fo"
+# Get API key and language code from Streamlit secrets
+try:
+    LANGUAGE_CODE = st.secrets["google_cloud_language"]["language_code"]
+    API_KEY = st.secrets["google_cloud_language"]["api_key"]
+except (KeyError, AttributeError):
+    # Fallback for cases where secrets are not available (e.g., non-Streamlit contexts)
+    # In production, ensure secrets are properly configured
+    import os
+    LANGUAGE_CODE = os.getenv("GOOGLE_LANGUAGE_CODE", "en")
+    API_KEY = os.getenv("GOOGLE_API_KEY", "")
+    if not API_KEY:
+        raise ValueError(
+            "API_KEY not found. Please configure it in .streamlit/secrets.toml or "
+            "set GOOGLE_API_KEY environment variable."
+        )
 
 client = language_v2.LanguageServiceClient(
     client_options={"api_key": API_KEY}
