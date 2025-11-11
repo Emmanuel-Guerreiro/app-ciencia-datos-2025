@@ -154,10 +154,27 @@ class DropColumns(BaseEstimator, TransformerMixin):
         return self
 
     def transform(self, X):
+        import sys
+        print("=== DropColumns.transform() iniciado ===")
+        sys.stdout.flush()
+        print(f"Columnas a eliminar configuradas: {self.columns_to_drop}")
+        sys.stdout.flush()
+        
         # Only drop columns that actually exist in the DataFrame
         columns_to_drop = [col for col in self.columns_to_drop if col in X.columns]
+        print(f"Columnas que realmente se eliminarán: {columns_to_drop}")
+        sys.stdout.flush()
+        
         if columns_to_drop:
-            return X.drop(columns=columns_to_drop)
+            result = X.drop(columns=columns_to_drop)
+            print(f"Columnas después de eliminar: {result.columns.tolist()}")
+            print("=== DropColumns.transform() completado ===")
+            sys.stdout.flush()
+            return result
+        
+        print("No hay columnas para eliminar")
+        print("=== DropColumns.transform() completado ===")
+        sys.stdout.flush()
         return X
 
 
@@ -306,6 +323,18 @@ def process_input(input_json: str, preprocessor):
         
         # Inspect pipeline steps
         print(f"Pipeline steps: {preprocessor.steps if hasattr(preprocessor, 'steps') else 'No steps attribute'}")
+        
+        # CRITICAL FIX: Replace transformers with fresh instances
+        if hasattr(preprocessor, 'steps'):
+            for i, (name, transformer) in enumerate(preprocessor.steps):
+                if name == 'feature_engineer' or isinstance(transformer, ManualFeatureEngineering):
+                    print(f"⚠️  Reemplazando {name} con una instancia fresca de ManualFeatureEngineering")
+                    preprocessor.steps[i] = (name, ManualFeatureEngineering())
+                elif name == 'drop_columns' or isinstance(transformer, DropColumns):
+                    print(f"⚠️  Reemplazando {name} con una instancia fresca de DropColumns")
+                    # Preserve the columns_to_drop configuration
+                    columns_to_drop = transformer.columns_to_drop if hasattr(transformer, 'columns_to_drop') else []
+                    preprocessor.steps[i] = (name, DropColumns(columns_to_drop=columns_to_drop))
         
         try:
             # Apply each step manually to see where it fails

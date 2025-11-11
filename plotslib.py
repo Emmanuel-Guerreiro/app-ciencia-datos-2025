@@ -309,19 +309,42 @@ def plot_btc_price_comparison(
     # Load BTC daily data
     btc_df = load_btc_daily_data(btc_csv_path)
     
-    # Create base chart with BTC close prices
-    base_chart = alt.Chart(btc_df).mark_line(
+    # Filter data to show only a window around the tweet date (if provided)
+    btc_df_filtered = btc_df.copy()
+    if tweet_date:
+        try:
+            tweet_datetime = pd.to_datetime(tweet_date)
+            tweet_date_only = tweet_datetime.date()
+            
+            # Create a window of 7 days before and after the tweet
+            start_date = pd.Timestamp(tweet_date_only) - pd.Timedelta(days=7)
+            end_date = pd.Timestamp(tweet_date_only) + pd.Timedelta(days=7)
+            
+            # Filter dataframe
+            btc_df_filtered = btc_df[
+                (btc_df['Open time'] >= start_date) & 
+                (btc_df['Open time'] <= end_date)
+            ].copy()
+            
+            if len(btc_df_filtered) == 0:
+                # Fallback to full data if no data in range
+                btc_df_filtered = btc_df.copy()
+        except:
+            # If any error, use full data
+            btc_df_filtered = btc_df.copy()
+    
+    # Create base chart with BTC close prices (filtered data)
+    base_chart = alt.Chart(btc_df_filtered).mark_line(
         color='gray',
         strokeWidth=2,
         opacity=0.7
     ).encode(
         x=alt.X('Open time:T', title='Fecha'),
-        y=alt.Y('Close:Q', title='Precio BTC (Close)'),
+        y=alt.Y('Close:Q', title='Precio BTC', scale=alt.Scale(zero=False)),
         tooltip=['Open time:T', 'Close:Q']
     ).properties(
-        width=800,
-        height=400,
-        title='Precio BTC y Comparación de Pendientes (Predicho vs Real)'
+        height=450,
+        title='BTC: Predicción vs Realidad (14 días)'
     )
     
     chart_layers = [base_chart]
@@ -391,6 +414,35 @@ def plot_btc_price_comparison(
                 tweet_close_price = float(btc_tweet_day.iloc[0]['Close'])
                 tweet_datetime_value = pd.Timestamp(btc_tweet_day.iloc[0]['Open time'])
                 
+                # Add a vertical line at the tweet time
+                tweet_marker_df = pd.DataFrame({'tweet_time': [tweet_datetime_value]})
+                tweet_marker = alt.Chart(tweet_marker_df).mark_rule(
+                    color='blue',
+                    strokeWidth=2,
+                    strokeDash=[10, 5],
+                    opacity=0.5
+                ).encode(
+                    x=alt.X('tweet_time:T', title='Fecha')
+                )
+                chart_layers.append(tweet_marker)
+                
+                # Add a point at the tweet moment
+                tweet_point_df = pd.DataFrame({
+                    'time': [tweet_datetime_value],
+                    'price': [tweet_close_price],
+                    'label': ['📍 Tweet']
+                })
+                tweet_point = alt.Chart(tweet_point_df).mark_point(
+                    color='blue',
+                    size=200,
+                    filled=True
+                ).encode(
+                    x=alt.X('time:T', title='Fecha'),
+                    y=alt.Y('price:Q', title='Precio BTC (Close)'),
+                    tooltip=['label:N', 'time:T', 'price:Q']
+                )
+                chart_layers.append(tweet_point)
+                
                 # Calculate predicted slope
                 predicted_slope = class_to_slope(pred_class, tweet_close_price)
                 
@@ -420,7 +472,7 @@ def plot_btc_price_comparison(
                     # Predicted slope line
                     pred_line = alt.Chart(line_points).mark_line(
                         color='red',
-                        strokeWidth=3,
+                        strokeWidth=4,
                         strokeDash=[5, 5]
                     ).encode(
                         x=alt.X('x:T', title='Fecha'),
@@ -430,7 +482,7 @@ def plot_btc_price_comparison(
                     # Actual slope line
                     actual_line = alt.Chart(line_points).mark_line(
                         color='green',
-                        strokeWidth=3,
+                        strokeWidth=4,
                         strokeDash=[2, 2]
                     ).encode(
                         x=alt.X('x:T', title='Fecha'),

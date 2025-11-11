@@ -8,9 +8,8 @@ from lib import CLASS_RANGES, load_inference_model, process_input, render_featur
 from plotslib import plot_btc_price_comparison
 
 st.set_page_config(page_title="Predicciones BTC", layout="wide")
-st.title("🔮 Predicciones de Bitcoin")
 
-# Load model and preprocessor
+# Load model and preprocessor first
 try:
     booster, params = load_inference_model()
     with open("static/preprocessor.pkl", "rb") as f:
@@ -19,28 +18,36 @@ except Exception as e:
     st.error(f"Error al cargar el modelo: {e}")
     st.stop()
 
-# --- Main Content ---
-st.markdown("## Analizar Tweet y Predecir Comportamiento de BTC")
+# Compact header
+col_title, col_info = st.columns([3, 1])
+with col_title:
+    st.title("Predicciones de Bitcoin")
+with col_info:
+    with st.expander("Info"):
+        st.caption("**XGBoost**")
+        st.caption("4 clases")
 
 # Create tabs for different input modes
-tab1, tab2 = st.tabs(["📋 Seleccionar Tweet Existente", "✍️ Agregar Nuevo Tweet"])
+tab1, tab2 = st.tabs(["Seleccionar Tweet Existente", "Agregar Nuevo Tweet"])
 
 # Tab 1: Select existing tweet
 with tab1:
-    st.markdown("### Seleccionar Tweet del Dataset")
-    
     try:
         # Load tweets
         tweets_df = pd.read_csv("static/tweets-processed.csv")
         tweets_df['date'] = pd.to_datetime(tweets_df['date'])
         tweets_df = tweets_df.sort_values('date', ascending=False).reset_index(drop=True)
         
-        # Create search functionality
-        search_term = st.text_input(
-            "🔍 Buscar tweet (por texto)",
-            placeholder="Escribe palabras clave para filtrar tweets...",
-            key="search_existing"
-        )
+        # Compact search and selection in columns
+        col_search, col_analyze = st.columns([3, 1])
+        
+        with col_search:
+            search_term = st.text_input(
+                "Buscar",
+                placeholder="Palabras clave...",
+                key="search_existing",
+                label_visibility="collapsed"
+            )
         
         # Filter tweets based on search
         filtered_df = tweets_df.copy()
@@ -48,57 +55,61 @@ with tab1:
             filtered_df = tweets_df[
                 tweets_df['text'].str.contains(search_term, case=False, na=False)
             ].reset_index(drop=True)
-            st.info(f"Se encontraron {len(filtered_df)} tweets que coinciden con la búsqueda")
+            st.caption(f"✓ {len(filtered_df)} tweets encontrados")
         
         if len(filtered_df) == 0:
-            st.warning("No se encontraron tweets. Intenta con otros términos de búsqueda.")
+            st.warning("Sin resultados")
         else:
             # Create a better display format for tweets
             def format_tweet_display(idx):
                 row = filtered_df.iloc[idx]
                 date_str = row['date'].strftime('%Y-%m-%d %H:%M')
-                text_preview = row['text'][:80].replace('\n', ' ')
+                text_preview = row['text'][:60].replace('\n', ' ')
                 return f"{date_str} | ❤️ {int(row.get('favorites', 0))} 🔁 {int(row.get('retweets', 0))} | {text_preview}..."
             
             # Select tweet
             selected_idx = st.selectbox(
-                "Selecciona un tweet",
+                "Tweet:",
                 options=range(len(filtered_df)),
                 format_func=format_tweet_display,
-                key="tweet_selector"
+                key="tweet_selector",
+                label_visibility="collapsed"
             )
             
             if selected_idx is not None:
                 selected_tweet = filtered_df.iloc[selected_idx]
                 
-                # Display tweet details
-                st.markdown("---")
-                st.markdown("### 📝 Detalles del Tweet Seleccionado")
+                # Compact display with expander
+                with st.expander("Ver detalles completos del tweet", expanded=False):
+                    col1, col2, col3, col4 = st.columns(4)
+                    with col1:
+                        st.caption("📅 **Fecha**")
+                        st.text(selected_tweet['date'].strftime('%Y-%m-%d %H:%M'))
+                    with col2:
+                        st.caption("❤️ **Favoritos**")
+                        st.text(int(selected_tweet.get('favorites', 0)))
+                    with col3:
+                        st.caption("🔁 **Retweets**")
+                        st.text(int(selected_tweet.get('retweets', 0)))
+                    with col4:
+                        st.caption("📊 **Δ BTC 24h**")
+                        st.text(f"{float(selected_tweet.get('btc_delta_24h', 0)):.4f}")
+                    
+                    st.text_area(
+                        "Texto:",
+                        value=selected_tweet['text'],
+                        height=80,
+                        disabled=True,
+                        key="tweet_display",
+                        label_visibility="collapsed"
+                    )
                 
-                col1, col2, col3 = st.columns([2, 1, 1])
-                with col1:
-                    st.markdown(f"**Fecha:** {selected_tweet['date'].strftime('%Y-%m-%d %H:%M:%S')}")
-                with col2:
-                    st.metric("❤️ Favoritos", int(selected_tweet.get('favorites', 0)))
-                with col3:
-                    st.metric("🔁 Retweets", int(selected_tweet.get('retweets', 0)))
-                
-                st.text_area(
-                    "Contenido del Tweet:",
-                    value=selected_tweet['text'],
-                    height=100,
-                    disabled=True,
-                    key="tweet_display"
-                )
-                
-                # Run prediction
-                if st.button("🚀 Analizar Tweet", key="analyze_existing", type="primary"):
-                    with st.spinner("Analizando tweet y generando predicción..."):
+                # Run prediction - Compact button
+                if st.button("🚀 Analizar", key="analyze_existing", type="primary", use_container_width=True):
+                    with st.spinner("Analizando..."):
                         try:
                             tweet_date = str(selected_tweet['date'])
                             tweet_text = selected_tweet['text']
-                            
-                            st.info(f"📝 Procesando tweet: {tweet_text[:100]}...")
                             
                             # Prepare input data
                             input_data = {
@@ -116,15 +127,10 @@ with tab1:
                             }
                             
                             # Process and predict
-                            with st.spinner("🔍 Analizando contenido del tweet con IA..."):
-                                data = process_input(json.dumps(input_data), preprocessor)
-                            
-                            st.success("✅ Análisis de contenido completado")
-                            
-                            with st.spinner("🎯 Generando predicción..."):
-                                feature_names = preprocessor.named_steps["column_transformer"].get_feature_names_out().tolist()
-                                dmatrix = xgb.DMatrix(data, feature_names=feature_names)
-                                pred_class = int(booster.predict(dmatrix)[0])
+                            data = process_input(json.dumps(input_data), preprocessor)
+                            feature_names = preprocessor.named_steps["column_transformer"].get_feature_names_out().tolist()
+                            dmatrix = xgb.DMatrix(data, feature_names=feature_names)
+                            pred_class = int(booster.predict(dmatrix)[0])
                             
                             # Calculate actual class
                             btc_delta = float(selected_tweet.get('btc_delta_24h', 0))
@@ -137,26 +143,33 @@ with tab1:
                             else:
                                 actual_class = 3
                             
-                            # Display results
+                            # Compact results display
                             st.markdown("---")
-                            st.markdown("### 📊 Resultados de la Predicción")
+                            col1, col2, col3 = st.columns([1, 1, 1])
                             
-                            col_pred, col_actual = st.columns(2)
-                            with col_pred:
-                                st.success(f"**🔮 Clase Predicha:** {pred_class}")
-                                st.info(CLASS_RANGES.get(pred_class, 'Desconocido'))
-                            with col_actual:
-                                st.success(f"**✅ Clase Real:** {actual_class}")
-                                st.info(f"{CLASS_RANGES.get(actual_class, 'Desconocido')}\n\nΔ Real: {btc_delta:.4f}")
+                            with col1:
+                                st.metric(
+                                    "🔮 Predicción", 
+                                    f"Clase {pred_class}",
+                                    CLASS_RANGES.get(pred_class, 'Desconocido')
+                                )
                             
-                            # Accuracy indicator
-                            if pred_class == actual_class:
-                                st.success("✅ ¡Predicción correcta!")
-                            else:
-                                st.warning(f"⚠️ Predicción incorrecta. Error: {abs(pred_class - actual_class)} clases de diferencia")
+                            with col2:
+                                st.metric(
+                                    "✅ Real", 
+                                    f"Clase {actual_class}",
+                                    f"Δ: {btc_delta:.4f}"
+                                )
                             
-                            # Plot comparison chart
-                            st.markdown("### 📈 Comparación Visual: Predicción vs Realidad")
+                            with col3:
+                                is_correct = pred_class == actual_class
+                                st.metric(
+                                    "Resultado",
+                                    "✓ Correcto" if is_correct else "✗ Error",
+                                    f"Δ {abs(pred_class - actual_class)} clases" if not is_correct else "Exacto"
+                                )
+                            
+                            # Compact chart
                             chart_btc = plot_btc_price_comparison(
                                 tweet_date=tweet_date,
                                 tweet_text=tweet_text,
@@ -165,13 +178,8 @@ with tab1:
                             )
                             st.altair_chart(chart_btc, width='stretch')
                             
-                            # Legend
-                            st.markdown("#### Referencia de Colores")
-                            col_legend1, col_legend2 = st.columns(2)
-                            with col_legend1:
-                                st.markdown("🔴 **Línea Roja (punteada)**: Pendiente Predicha por el Modelo")
-                            with col_legend2:
-                                st.markdown("🟢 **Línea Verde (punteada)**: Pendiente Real del Bitcoin")
+                            # Compact legend
+                            st.caption("🔵 Línea azul: momento del tweet | 🔴 Roja: predicción | 🟢 Verde: real")
                             
                         except Exception as e:
                             st.error(f"Error al analizar el tweet: {e}")
@@ -183,60 +191,38 @@ with tab1:
 
 # Tab 2: Add new tweet
 with tab2:
-    st.markdown("### Crear Nuevo Tweet para Análisis")
-    st.info("💡 Completa los campos para simular un tweet nuevo y predecir su impacto en Bitcoin")
+    st.caption("💡 Completa los campos para crear un tweet y predecir su impacto")
     
     with st.form("new_tweet_form"):
-        col_form1, col_form2 = st.columns(2)
+        # More compact layout with 4 columns
+        col1, col2, col3, col4 = st.columns(4)
         
-        with col_form1:
-            new_date = st.date_input(
-                "📅 Fecha del Tweet",
-                value=datetime.now(),
-                help="Selecciona la fecha del tweet"
-            )
-            new_time = st.time_input(
-                "🕐 Hora del Tweet",
-                value=datetime.now().time(),
-                help="Selecciona la hora del tweet"
-            )
-        
-        with col_form2:
-            new_favorites = st.number_input(
-                "❤️ Favoritos",
-                min_value=0,
-                value=0,
-                step=1,
-                help="Número de favoritos/likes del tweet"
-            )
-            new_retweets = st.number_input(
-                "🔁 Retweets",
-                min_value=0,
-                value=0,
-                step=1,
-                help="Número de retweets"
-            )
+        with col1:
+            new_date = st.date_input("📅 Fecha", value=datetime.now())
+        with col2:
+            new_time = st.time_input("🕐 Hora", value=datetime.now().time())
+        with col3:
+            new_favorites = st.number_input("❤️ Favs", min_value=0, value=0, step=1)
+        with col4:
+            new_retweets = st.number_input("🔁 RTs", min_value=0, value=0, step=1)
         
         new_text = st.text_area(
-            "📝 Texto del Tweet",
-            placeholder="Escribe el contenido del tweet aquí...",
-            height=150,
-            help="Contenido del tweet a analizar"
+            "📝 Texto",
+            placeholder="Contenido del tweet...",
+            height=100
         )
         
-        submit_button = st.form_submit_button("🚀 Analizar Nuevo Tweet", type="primary")
+        submit_button = st.form_submit_button("🚀 Analizar", type="primary", use_container_width=True)
     
     if submit_button:
         if not new_text.strip():
-            st.error("⚠️ Por favor ingresa el texto del tweet")
+            st.error("⚠️ Ingresa texto")
         else:
-            with st.spinner("Analizando nuevo tweet..."):
+            with st.spinner("Analizando..."):
                 try:
                     # Combine date and time
                     new_datetime = datetime.combine(new_date, new_time)
                     new_datetime_str = new_datetime.strftime('%Y-%m-%d %H:%M:%S')
-                    
-                    st.info(f"📝 Procesando nuevo tweet...")
                     
                     # Prepare input data (with defaults for BTC fields)
                     input_data = {
@@ -254,41 +240,39 @@ with tab2:
                     }
                     
                     # Process and predict
-                    with st.spinner("🔍 Analizando contenido del tweet con IA..."):
-                        data = process_input(json.dumps(input_data), preprocessor)
+                    data = process_input(json.dumps(input_data), preprocessor)
+                    feature_names = preprocessor.named_steps["column_transformer"].get_feature_names_out().tolist()
+                    dmatrix = xgb.DMatrix(data, feature_names=feature_names)
+                    pred_class = int(booster.predict(dmatrix)[0])
                     
-                    st.success("✅ Análisis de contenido completado")
-                    
-                    with st.spinner("🎯 Generando predicción..."):
-                        feature_names = preprocessor.named_steps["column_transformer"].get_feature_names_out().tolist()
-                        dmatrix = xgb.DMatrix(data, feature_names=feature_names)
-                        pred_class = int(booster.predict(dmatrix)[0])
-                    
-                    # Display results
+                    # Compact display
                     st.markdown("---")
-                    st.markdown("### 📊 Resultado de la Predicción")
                     
-                    st.success(f"**🔮 Clase Predicha:** {pred_class}")
-                    st.info(f"**Interpretación:** {CLASS_RANGES.get(pred_class, 'Desconocido')}")
-                    
-                    # Interpretation guide
-                    st.markdown("### 📖 ¿Qué significa esta predicción?")
-                    
-                    interpretation = {
-                        0: ("📉 **Caída Fuerte**", "El modelo predice una caída significativa del Bitcoin (más del 6% en 24h). Este tweet tiene un sentimiento muy negativo."),
-                        1: ("📊 **Caída Moderada**", "El modelo predice una caída moderada del Bitcoin (entre 0% y 6% en 24h). Sentimiento ligeramente negativo."),
-                        2: ("📈 **Crecimiento Leve**", "El modelo predice un crecimiento pequeño del Bitcoin (entre 0% y 0.2% en 24h). Sentimiento neutral a ligeramente positivo."),
-                        3: ("🚀 **Crecimiento Fuerte**", "El modelo predice un crecimiento significativo del Bitcoin (más de 0.2% en 24h). Este tweet tiene un sentimiento muy positivo.")
+                    interpretation_icons = {
+                        0: "📉 Caída Fuerte",
+                        1: "📊 Caída Moderada",
+                        2: "📈 Crecimiento Leve",
+                        3: "🚀 Crecimiento Fuerte"
                     }
                     
-                    if pred_class in interpretation:
-                        title, description = interpretation[pred_class]
-                        st.markdown(f"#### {title}")
-                        st.write(description)
+                    col1, col2 = st.columns([1, 2])
+                    with col1:
+                        st.metric("🔮 Predicción", f"Clase {pred_class}")
+                    with col2:
+                        st.info(f"{interpretation_icons.get(pred_class, '')} - {CLASS_RANGES.get(pred_class, 'Desconocido')}")
                     
-                    # Plot comparison chart (without actual data for new tweets)
+                    # Plot with expander for details
+                    with st.expander("📖 Ver interpretación detallada", expanded=False):
+                        interpretation = {
+                            0: "El modelo predice una caída significativa del Bitcoin (más del 6% en 24h). Sentimiento muy negativo.",
+                            1: "El modelo predice una caída moderada del Bitcoin (entre 0% y 6% en 24h). Sentimiento ligeramente negativo.",
+                            2: "El modelo predice un crecimiento pequeño del Bitcoin (entre 0% y 0.2% en 24h). Sentimiento neutral a ligeramente positivo.",
+                            3: "El modelo predice un crecimiento significativo del Bitcoin (más de 0.2% en 24h). Sentimiento muy positivo."
+                        }
+                        st.write(interpretation.get(pred_class, ""))
+                    
+                    # Plot comparison chart
                     try:
-                        st.markdown("### 📈 Visualización de Predicción en Contexto Histórico")
                         chart_btc = plot_btc_price_comparison(
                             tweet_date=new_datetime_str,
                             tweet_text=new_text,
@@ -296,26 +280,27 @@ with tab2:
                             preprocessor=preprocessor
                         )
                         st.altair_chart(chart_btc, width='stretch')
-                        st.caption("🔴 La línea roja punteada muestra la predicción del modelo para las próximas 24 horas")
+                        st.caption("🔴 Línea roja: predicción del modelo para las próximas 24h")
                     except Exception as e:
-                        st.warning(f"No se pudo generar el gráfico histórico: {e}")
+                        st.warning(f"⚠️ No se pudo generar gráfico: {e}")
                     
                 except Exception as e:
                     st.error(f"Error al procesar el nuevo tweet: {e}")
                     import traceback
                     st.code(traceback.format_exc())
 
-# --- Sidebar: Model Info ---
+# --- Compact Sidebar ---
 with st.sidebar:
-    st.markdown("## ℹ️ Información del Modelo")
+    st.markdown("### ℹ️ Modelo")
+    st.caption("**XGBoost Classifier**")
+    st.caption("4 clases de predicción")
     
-    with st.expander("⚙️ Hiperparámetros del Modelo"):
+    with st.expander("📚 Clases", expanded=False):
+        for class_id, class_range in CLASS_RANGES.items():
+            st.caption(f"**{class_id}:** {class_range}")
+    
+    with st.expander("⚙️ Hiperparámetros", expanded=False):
         st.json(params)
     
-    with st.expander("📊 Feature Importance"):
+    with st.expander("📊 Importancia", expanded=False):
         render_feature_importance(booster)
-    
-    st.markdown("---")
-    st.markdown("### 📚 Guía de Clases")
-    for class_id, class_range in CLASS_RANGES.items():
-        st.markdown(f"**Clase {class_id}:** `{class_range}`")
