@@ -142,7 +142,7 @@ chart, plot_df = plot_text_analysis_scatter(
     y_threshold=y_threshold,
     sample_size=sample_size
 )
-st.altair_chart(chart, use_container_width=True)
+st.altair_chart(chart, width='stretch')
 
 # Calculate and display quadrant statistics
 if x_threshold is not None and y_threshold is not None:
@@ -150,7 +150,7 @@ if x_threshold is not None and y_threshold is not None:
     quadrant_stats = calculate_quadrant_stats(
         plot_df, x_var, y_var, x_threshold, y_threshold
     )
-    st.dataframe(quadrant_stats, use_container_width=True, hide_index=True)
+    st.dataframe(quadrant_stats, width='stretch', hide_index=True)
     
     # Display summary metrics
     col1, col2, col3, col4 = st.columns(4)
@@ -195,112 +195,8 @@ if st.button("Generar Boxplot", key="boxplot_button"):
                 variable=selected_var_boxplot,
                 sample_size=sample_size_boxplot
             )
-            st.altair_chart(chart_boxplot, use_container_width=True)
+            st.altair_chart(chart_boxplot, width='stretch')
         except Exception as e:
             st.error(f"Error al generar boxplot: {e}")
 
-# --- New BTC Price Comparison Plot ---
-st.markdown("---")
-st.markdown("## Comparación de Predicción BTC vs Realidad")
-
-# Load model and preprocessor
-try:
-    booster, params = load_inference_model()
-    with open("static/preprocessor.pkl", "rb") as f:
-        preprocessor = cloudpickle.load(f)
-    
-    # Load tweets for selection
-    tweets_df = pd.read_csv("static/tweets-processed.csv")
-    tweets_df['date'] = pd.to_datetime(tweets_df['date'])
-    
-    # Create tweet selector
-    st.markdown("### Seleccionar Tweet")
-    
-    # Create a searchable/filterable tweet selector
-    tweet_options = []
-    for idx, row in tweets_df.iterrows():
-        tweet_display = f"{row['date']} - {row['text'][:100]}..."
-        tweet_options.append((idx, tweet_display))
-    
-    # Use selectbox with formatted display
-    selected_tweet_idx = st.selectbox(
-        "Selecciona un tweet para analizar",
-        options=range(len(tweets_df)),
-        format_func=lambda x: f"{tweets_df.iloc[x]['date']} - {tweets_df.iloc[x]['text'][:100]}...",
-        index=0 if len(tweets_df) > 0 else None
-    )
-    
-    if selected_tweet_idx is not None:
-        selected_tweet = tweets_df.iloc[selected_tweet_idx]
-        tweet_date = str(selected_tweet['date'])
-        tweet_text = selected_tweet['text']
-        
-        # Display selected tweet info
-        st.info(f"**Tweet seleccionado:** {tweet_text[:200]}...")
-        
-        # Plot BTC price comparison
-        chart_btc = plot_btc_price_comparison(
-            tweet_date=tweet_date,
-            tweet_text=tweet_text,
-            booster=booster,
-            preprocessor=preprocessor
-        )
-        st.altair_chart(chart_btc, use_container_width=True)
-        
-        # Show prediction details
-        try:
-            from lib import process_input, CLASS_RANGES
-            import json
-            
-            input_data = {
-                "id": str(selected_tweet.get('id', '1')),
-                "text": tweet_text,
-                "device": "web",
-                "favorites": int(selected_tweet.get('favorites', 0)),
-                "retweets": int(selected_tweet.get('retweets', 0)),
-                "date": tweet_date,
-                "btc_delta_24h": float(selected_tweet.get('btc_delta_24h', 0)),
-                "btc_tweet_day": int(selected_tweet.get('btc_tweet_day', 0)),
-                "btc_delta_48h": float(selected_tweet.get('btc_delta_48h', 0)),
-                "btc_24h_after": float(selected_tweet.get('btc_24h_after', 0)),
-                "btc_48h_after": float(selected_tweet.get('btc_48h_after', 0))
-            }
-            
-            data = process_input(json.dumps(input_data), preprocessor)
-            feature_names = preprocessor.named_steps["column_transformer"].get_feature_names_out().tolist()
-            dmatrix = xgb.DMatrix(data, feature_names=feature_names)
-            pred_class = int(booster.predict(dmatrix)[0])
-            
-            # Calculate actual class from btc_delta_24h
-            btc_delta = float(selected_tweet.get('btc_delta_24h', 0))
-            if btc_delta < -0.06:
-                actual_class = 0
-            elif -0.06 <= btc_delta <= 0:
-                actual_class = 1
-            elif 0 < btc_delta <= 0.002:
-                actual_class = 2
-            else:  # btc_delta > 0.002
-                actual_class = 3
-            
-            # Display both predicted and actual classes
-            col_pred, col_actual = st.columns(2)
-            with col_pred:
-                st.success(f"**Clase Predicha:** {pred_class} - {CLASS_RANGES.get(pred_class, 'Desconocido')}")
-            with col_actual:
-                st.info(f"**Clase Real:** {actual_class} - {CLASS_RANGES.get(actual_class, 'Desconocido')} (Δ: {btc_delta:.4f})")
-            
-            # Display color reference for the plot
-            st.markdown("### Referencia de Colores en el Gráfico")
-            col_red, col_green = st.columns(2)
-            with col_red:
-                st.markdown("🔴 **Rojo (línea punteada)**: Pendiente Predicha")
-            with col_green:
-                st.markdown("🟢 **Verde (línea punteada)**: Pendiente Real")
-            
-        except Exception as e:
-            st.error(f"Error al obtener predicción: {e}")
-            
-except Exception as e:
-    st.error(f"Error al cargar el modelo: {e}")
-    st.info("Asegúrate de que los archivos del modelo estén disponibles en la carpeta static/")
 
