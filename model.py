@@ -9,6 +9,8 @@ from plotslib import plot_btc_price_comparison
 
 st.set_page_config(page_title="Predicciones BTC", layout="wide")
 
+
+
 # Load model and preprocessor first
 try:
     booster, params = load_inference_model()
@@ -17,6 +19,22 @@ try:
 except Exception as e:
     st.error(f"Error al cargar el modelo: {e}")
     st.stop()
+
+
+# --- Modelo (Main) ---
+st.markdown("### ℹ️ Modelo")
+st.caption("**XGBoost Classifier**")
+st.caption("4 clases de predicción")
+
+with st.expander("📚 Clases", expanded=False):
+    for class_id, class_range in CLASS_RANGES.items():
+        st.caption(f"**{class_id}:** {class_range}")
+
+with st.expander("⚙️ Hiperparámetros", expanded=False):
+    st.json(params)
+
+with st.expander("📊 Importancia", expanded=False):
+    render_feature_importance(booster)
 
 # Compact header
 col_title, col_info = st.columns([3, 1])
@@ -133,7 +151,7 @@ with tab1:
                             pred_class = int(booster.predict(dmatrix)[0])
                             
                             # Calculate actual class
-                            btc_delta = float(selected_tweet.get('btc_delta_24h', 0))
+                            btc_delta = float(selected_tweet.get('btc_delta_24h_pct', 0))
                             if btc_delta < -0.06:
                                 actual_class = 0
                             elif -0.06 <= btc_delta <= 0:
@@ -151,7 +169,7 @@ with tab1:
                                 st.metric(
                                     "🔮 Predicción", 
                                     f"Clase {pred_class}",
-                                    CLASS_RANGES.get(pred_class, 'Desconocido')
+                                    CLASS_RANGES.get(pred_class, 'Desconocido') 
                                 )
                             
                             with col2:
@@ -289,18 +307,3 @@ with tab2:
                     import traceback
                     st.code(traceback.format_exc())
 
-# --- Compact Sidebar ---
-with st.sidebar:
-    st.markdown("### ℹ️ Modelo")
-    st.caption("**XGBoost Classifier**")
-    st.caption("4 clases de predicción")
-    
-    with st.expander("📚 Clases", expanded=False):
-        for class_id, class_range in CLASS_RANGES.items():
-            st.caption(f"**{class_id}:** {class_range}")
-    
-    with st.expander("⚙️ Hiperparámetros", expanded=False):
-        st.json(params)
-    
-    with st.expander("📊 Importancia", expanded=False):
-        render_feature_importance(booster)
